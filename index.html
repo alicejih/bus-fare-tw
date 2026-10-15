@@ -693,28 +693,48 @@
       }
     }
 
+    // 站名文字標準化 (自動處理「台」與「臺」相容)
+    function normStation(name) {
+      return (name || "").replace(/台/g, "臺").trim().toLowerCase();
+    }
+
     // 建立所有站名清單以供自動完成
     function buildAllStopsDatalist() {
-      if (!currentData || !currentData.stopOfRoute) return;
+      if (!currentData) return;
       const uniqueStops = new Set();
-      currentData.stopOfRoute.forEach(route => {
-        if (route.Stops) {
-          route.Stops.forEach(s => {
-            const name = getStopName(s);
-            if (name) uniqueStops.add(name);
-          });
-        }
-      });
+      
+      if (currentData.stopOfRoute) {
+        currentData.stopOfRoute.forEach(route => {
+          if (route.Stops) {
+            route.Stops.forEach(s => {
+              const name = getStopName(s);
+              if (name) {
+                uniqueStops.add(name);
+                if (name.includes("臺")) uniqueStops.add(name.replace(/臺/g, "台"));
+              }
+            });
+          }
+        });
+      }
+
+      if (currentData.stations) {
+        currentData.stations.forEach(s => {
+          const name = s.StationName ? (s.StationName.Zh_tw || s.StationName) : "";
+          if (name) {
+            uniqueStops.add(name);
+            if (name.includes("臺")) uniqueStops.add(name.replace(/臺/g, "台"));
+          }
+        });
+      }
 
       let html = "";
-      // 限制前 1500 個站名以保持流暢
       Array.from(uniqueStops).sort().slice(0, 1500).forEach(name => {
         html += `<option value="${name}"></option>`;
       });
       allStopsDatalist.innerHTML = html;
     }
 
-    // 🌟 核心：站點對站點直達路線與金額搜尋演算法
+    // 🌟 核心：站點對站點直達路線與金額搜尋演算法 (支援公車、客運、高鐵、台鐵全車種)
     function searchPointToPoint() {
       const queryA = inputStopA.value.trim();
       const queryB = inputStopB.value.trim();
@@ -735,6 +755,46 @@
 
       highlightOriginStopName = queryA;
       highlightDestStopName = queryB;
+
+      const nQueryA = normStation(queryA);
+      const nQueryB = normStation(queryB);
+
+      const matchedRoutes = [];
+      const seenRouteDirKeys = new Set();
+
+      // 特殊處理：台鐵 (TRA) 或高鐵 (THSR) 直達起訖站點檢索
+      if (currentData.cityCode === "TRA" || (currentData.routeFare && currentData.routeFare.length > 0 && currentData.routeFare[0].RouteID === "TRA")) {
+        currentData.routeFare.forEach(rf => {
+          const oName = rf.OriginStationName || (rf.StageFares && rf.StageFares[0] && rf.StageFares[0].OriginStage ? rf.StageFares[0].OriginStage.StopName : "");
+          const dName = rf.DestinationStationName || (rf.StageFares && rf.StageFares[0] && rf.StageFares[0].DestinationStage ? rf.StageFares[0].DestinationStage.StopName : "");
+          
+          const nOName = normStation(oName);
+          const nDName = normStation(dName);
+
+          if (nOName.includes(nQueryA) && nDName.includes(nQueryB)) {
+            const dedupeKey = `TRA_${oName}_${dName}`;
+            if (!seenRouteDirKeys.has(dedupeKey)) {
+              seenRouteDirKeys.add(dedupeKey);
+              const fares = (rf.StageFares && rf.StageFares[0] && rf.StageFares[0].Fares) ? rf.StageFares[0].Fares : (rf.Fares || []);
+              matchedRoutes.push({
+                routeID: "TRA",
+                routeName: "台灣鐵路 (TRA / 台鐵)",
+                subRouteName: `${oName} 往 ${dName}`,
+                direction: rf.Direction || 0,
+                stopA: oName,
+                stopB: dName,
+                seqA: 1,
+                seqB: 2,
+                stopCount: 1,
+                fares: fares,
+                firstStop: oName,
+                lastStop: dName,
+                stopsList: []
+              });
+            }
+          }
+        });
+      }
 
       // 1. 建立 RouteID + Direction 對應 StageFares 的快速查詢表
       const fareStagesMap = new Map();
@@ -759,10 +819,7 @@
       }
 
       // 2. 遍歷所有路線之站牌序列 (StopOfRoute)，尋找包含站名 A 且站名 A 位於站名 B 之前的直達路線
-      const matchedRoutes = [];
-      const seenRouteDirKeys = new Set();
-
-      if (currentData.stopOfRoute) {
+      if (currentData.stopOfRoute && matchedRoutes.length === 0) {
         currentData.stopOfRoute.forEach(route => {
           const rId = route.RouteID || route.RouteUID;
           const rName = typeof route.RouteName === "object" ? (route.RouteName.Zh_tw || route.RouteName.En) : route.RouteName;
@@ -770,9 +827,9 @@
           const subName = typeof route.SubRouteName === "object" ? (route.SubRouteName.Zh_tw || route.SubRouteName.En) : (route.SubRouteName || rName);
           const stops = route.Stops || [];
 
-          // 尋找符合 queryA 與 queryB 的站點
-          const stopsA = stops.filter(s => getStopName(s).includes(queryA));
-          const stopsB = stops.filter(s => getStopName(s).includes(queryB));
+          // 尋找符合 queryA 與 queryB 的站點 (支援「台」與「臺」自動相容)
+          const stopsA = stops.filter(s => normStation(getStopName(s)).includes(nQueryA) || getStopName(s).includes(queryA));
+          const stopsB = stops.filter(s => normStation(getStopName(s)).includes(nQueryB) || getStopName(s).includes(queryB));
 
           if (stopsA.length > 0 && stopsB.length > 0) {
             for (let sa of stopsA) {
@@ -796,8 +853,13 @@
 
                     // 第一優先：精準或包含匹配計費區間
                     for (let st of stageList) {
-                      if ((st.originStage.includes(saName) || saName.includes(st.originStage)) &&
-                          (st.destStage.includes(sbName) || sbName.includes(st.destStage))) {
+                      const nStOrig = normStation(st.originStage);
+                      const nStDest = normStation(st.destStage);
+                      const nSa = normStation(saName);
+                      const nSb = normStation(sbName);
+
+                      if ((nStOrig.includes(nSa) || nSa.includes(nStOrig)) &&
+                          (nStDest.includes(nSb) || nSb.includes(nStDest))) {
                         matchedFares = st.fares;
                         break;
                       }
@@ -806,8 +868,11 @@
                     // 第二優先：模糊比對任何含 queryA 與 queryB 的區間
                     if (matchedFares.length === 0) {
                       for (let st of stageList) {
-                        if ((st.originStage.includes(queryA) || queryA.includes(st.originStage)) &&
-                            (st.destStage.includes(queryB) || queryB.includes(st.destStage))) {
+                        const nStOrig = normStation(st.originStage);
+                        const nStDest = normStation(st.destStage);
+
+                        if ((nStOrig.includes(nQueryA) || nQueryA.includes(nStOrig)) &&
+                            (nStDest.includes(nQueryB) || nQueryB.includes(nStDest))) {
                           matchedFares = st.fares;
                           break;
                         }
@@ -827,7 +892,7 @@
                       stopA: saName,
                       stopB: sbName,
                       seqA: seqA,
-                      seqB: sbBSeq = seqB,
+                      seqB: seqB,
                       stopCount: seqB - seqA,
                       fares: matchedFares,
                       firstStop: getStopName(stops[0]),

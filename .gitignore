@@ -8,3 +8,4 @@ Applications
 data/*.json
 !data/manifest.json
 !data/THSR_data.json
+!data/TRA_data.json
