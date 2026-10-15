@@ -794,6 +794,9 @@
             }
           }
         });
+
+        renderPointToPointResults(queryA, queryB, matchedRoutes.slice(0, 20));
+        return;
       }
 
       // 1. 建立 RouteID + Direction 對應 StageFares 的快速查詢表
@@ -1031,9 +1034,18 @@
       document.getElementById("stopsViewContainer").scrollIntoView({ behavior: "smooth", block: "nearest" });
     };
 
-    // 建立路線清單下拉選單
+    // 建立路線清單下拉選單 (針對台鐵進行極速優化避免卡頓)
     function populateRouteList() {
       if (!currentData) return;
+
+      if (currentData.cityCode === "TRA") {
+        routeSelect.innerHTML = '<option value="TRA" selected>🚂 台灣鐵路 (TRA 全線)</option>';
+        routeCountLabel.innerText = "1";
+        selectedRouteID = "TRA";
+        routeSearchInput.value = "";
+        return;
+      }
+
       const routesMap = new Map();
 
       if (currentData.stopOfRoute) {
@@ -1097,9 +1109,16 @@
       renderCurrentRouteViews();
     }
 
-    // 填充附屬路線 (SubRoute) 下拉選單
+    // 填充附屬路線 (SubRoute) 下拉選單 (限制上限避免 DOM 爆量)
     function populateSubRouteOptions() {
       subRouteSelect.innerHTML = '<option value="all">全部附屬路線</option>';
+
+      if (currentData.cityCode === "TRA") {
+        subRouteSelect.innerHTML = '<option value="all">全線各站區間 (57,841組)</option>';
+        selectedSubRoute = "all";
+        return;
+      }
+
       const subRoutes = new Set();
 
       if (currentData.routeFare) {
@@ -1115,7 +1134,7 @@
         });
       }
 
-      subRoutes.forEach(sub => {
+      Array.from(subRoutes).slice(0, 100).forEach(sub => {
         const opt = document.createElement("option");
         opt.value = sub;
         opt.textContent = sub;
@@ -1260,7 +1279,12 @@
         }
       });
 
-      fareCountBadge.innerText = `${allStages.length} 筆`;
+      const MAX_TABLE_DISPLAY = 100;
+      const displayStages = allStages.slice(0, MAX_TABLE_DISPLAY);
+
+      fareCountBadge.innerText = allStages.length > MAX_TABLE_DISPLAY 
+        ? `${allStages.length} 筆 (表格顯示前 ${MAX_TABLE_DISPLAY} 筆，請使用上方快速搜尋特定站)` 
+        : `${allStages.length} 筆`;
 
       if (allStages.length === 0) {
         fareTableBody.innerHTML = `
@@ -1274,7 +1298,7 @@
       }
 
       let html = "";
-      allStages.forEach(stage => {
+      displayStages.forEach(stage => {
         const originName = stage.OriginStage ? (stage.OriginStage.StopName || stage.OriginStage.StageName || stage.OriginStage.StopID) : "N/A";
         const destName = stage.DestinationStage ? (stage.DestinationStage.StopName || stage.DestinationStage.StageName || stage.DestinationStage.StopID) : "N/A";
 
