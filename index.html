@@ -33,8 +33,12 @@
           <p class="text-xs text-blue-100 opacity-90">基於交通部 TDX 運輸資料流通平台 • 即時智慧匹配起訖站與計算票價</p>
         </div>
       </div>
-      <!-- 快速載入狀態與本機檔案匯入按鈕 -->
+      <!-- 快速載入狀態、GAS 雲端狀態與本機檔案匯入按鈕 -->
       <div class="flex items-center space-x-2 text-sm">
+        <div class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Google Apps Script 雲端就緒</span>
+        </div>
         <label for="localFileInput" class="cursor-pointer bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg border border-white/30 transition flex items-center space-x-1.5 shadow-sm text-xs font-medium">
           <i class="fa-solid fa-folder-open text-amber-300"></i>
           <span>本機載入 JSON</span>
@@ -475,24 +479,154 @@
       }
     }
 
-    // 載入指定縣市 JSON 檔案
+    // Google Apps Script 雲端 Web App API 網址 (由使用者部署)
+    const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyzYTvHyw__x_UeYQ2d6Z59acZPDE7q3B5pejbfJNyB_MQRyKABh9XBOLKQekAbIL6V2A/exec";
+
+    // 載入指定縣市或運具資料 (優先嘗試讀取本機靜態檔，若無則自動由 Google Apps Script 雲端獲取)
     async function loadCityData(cityCode) {
       currentCityCode = cityCode;
-      fileInfoBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> 正在載入 data/${cityCode}_data.json ...`;
+      fileInfoBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> 正在載入 [${cityCode}] 資料...`;
       
+      // 1. 優先嘗試讀取本機或 GitHub Pages 靜態 data/*.json
       try {
         const response = await fetch(`data/${cityCode}_data.json`);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: 尚未產生或找不到該檔案`);
+        if (response.ok) {
+          const data = await response.json();
+          parseLoadedData(data, `data/${cityCode}_data.json (靜態快取)`);
+          return;
         }
-        const data = await response.json();
-        parseLoadedData(data, `data/${cityCode}_data.json`);
+      } catch (e) {
+        // 靜態檔未部署，進入 GAS 雲端載入模式
+      }
+
+      // 2. 自動由 Google Apps Script 雲端獲取即時資料
+      try {
+        fileInfoBox.innerHTML = `<i class="fa-solid fa-cloud-arrow-down fa-spin text-indigo-600"></i> 正在透過 Google Apps Script 雲端獲取 [${cityCode}] 即時資料...`;
+        let gasQueryType = "bus";
+        let gasQueryRoute = "9005";
+        if (cityCode === "THSR") gasQueryType = "thsr";
+        else if (cityCode === "TRA") gasQueryType = "tra";
+        else gasQueryRoute = "9005";
+
+        const gasRes = await fetch(`${GAS_WEBAPP_URL}?type=${gasQueryType}&route=${gasQueryRoute}`);
+        if (!gasRes.ok) throw new Error(`GAS 雲端連線失敗 (HTTP ${gasRes.status})`);
+        const gasRaw = await gasRes.json();
+
+        const formatted = formatGasData(cityCode, gasQueryType, gasRaw);
+        parseLoadedData(formatted, "Google Apps Script 雲端即時資料庫");
       } catch (err) {
         fileInfoBox.innerHTML = `
           <div class="text-amber-700">
-            <i class="fa-solid fa-triangle-exclamation"></i> <strong>無法透過網路載入：</strong>${err.message}<br>
-            <span class="text-[11px] text-slate-500">提示：若直接以瀏覽器雙擊 HTML 開啟，因安全策略需點擊右上角「本機載入 JSON」手動選取檔案。</span>
+            <i class="fa-solid fa-triangle-exclamation"></i> <strong>載入失敗：</strong>${err.message}<br>
+            <span class="text-[11px] text-slate-500">提示：若網路受限，亦可透過右上角「本機載入 JSON」直接手動選取本機檔案。</span>
           </div>`;
+      }
+    }
+
+    // 將 Google Apps Script 回傳之原始資料轉換為標準前端結構
+    function formatGasData(cityCode, type, rawData) {
+      if (!Array.isArray(rawData)) return rawData;
+
+      if (type === "thsr") {
+        const cabinNames = { 1: "標準車廂", 2: "商務車廂", 3: "自由座" };
+        const ticketNames = { 1: "全票", 2: "孩童票", 3: "敬老票", 4: "愛心票" };
+        const formattedFares = [];
+        const stationsSet = new Map();
+
+        rawData.forEach(f => {
+          const orig = f.OriginStationName ? (f.OriginStationName.Zh_tw || f.OriginStationName) : "";
+          const dest = f.DestinationStationName ? (f.DestinationStationName.Zh_tw || f.DestinationStationName) : "";
+          if (orig) stationsSet.set(f.OriginStationID, orig);
+          if (dest) stationsSet.set(f.DestinationStationID, dest);
+
+          const stageFares = (f.Fares || []).map(item => ({
+            FareName: `${cabinNames[item.CabinClass] || '一般'}_${ticketNames[item.TicketType] || '票'}`,
+            Price: item.Price
+          }));
+
+          formattedFares.push({
+            RouteID: "THSR",
+            RouteName: "台灣高鐵",
+            SubRouteName: `${orig} - ${dest}`,
+            Direction: f.Direction || 0,
+            Fares: stageFares,
+            StageFares: [{
+              Direction: f.Direction || 0,
+              OriginStage: { StopName: orig, StopID: f.OriginStationID },
+              DestinationStage: { StopName: dest, StopID: f.DestinationStationID },
+              Fares: stageFares
+            }]
+          });
+        });
+
+        const stopsArr = Array.from(stationsSet.entries()).map(([id, name], idx) => ({
+          StopID: id,
+          StopName: { Zh_tw: name },
+          StopSequence: idx + 1
+        }));
+
+        return {
+          cityCode: "THSR",
+          cityName: "台灣高鐵 (THSR)",
+          stopOfRoute: [
+            { RouteID: "THSR", RouteName: { Zh_tw: "台灣高鐵 (全線)" }, Direction: 0, Stops: stopsArr }
+          ],
+          routeFare: formattedFares
+        };
+      } else if (type === "tra") {
+        const ticketNames = { "成自": "自強號 (全票)", "成莒": "莒光號 (全票)", "成復": "區間車 (全票)" };
+        const formattedFares = rawData.map(f => {
+          const orig = f.OriginStationName ? (f.OriginStationName.Zh_tw || f.OriginStationName) : "";
+          const dest = f.DestinationStationName ? (f.DestinationStationName.Zh_tw || f.DestinationStationName) : "";
+          const stageFares = (f.Fares || []).map(item => ({
+            FareName: ticketNames[item.TicketType] || item.TicketType,
+            Price: item.Price
+          }));
+          return {
+            RouteID: "TRA",
+            RouteName: "台灣鐵路",
+            SubRouteName: `${orig} - ${dest}`,
+            Direction: f.Direction || 0,
+            StageFares: [{
+              Direction: f.Direction || 0,
+              OriginStage: { StopName: orig, StopID: f.OriginStationID },
+              DestinationStage: { StopName: dest, StopID: f.DestinationStationID },
+              Fares: stageFares
+            }]
+          };
+        });
+        return {
+          cityCode: "TRA",
+          cityName: "台灣鐵路 (TRA / 台鐵)",
+          stopOfRoute: [],
+          routeFare: formattedFares
+        };
+      } else {
+        // 客運 (如 9005)
+        const stopsMap = new Map();
+        rawData.forEach(f => {
+          (f.StageFares || []).forEach(st => {
+            const oName = st.OriginStage ? st.OriginStage.StopName : "";
+            const dName = st.DestinationStage ? st.DestinationStage.StopName : "";
+            if (oName && !stopsMap.has(oName)) stopsMap.set(oName, stopsMap.size + 1);
+            if (dName && !stopsMap.has(dName)) stopsMap.set(dName, stopsMap.size + 1);
+          });
+        });
+
+        const stopsArr = Array.from(stopsMap.entries()).map(([name, seq]) => ({
+          StopID: `${seq}`,
+          StopName: { Zh_tw: name },
+          StopSequence: seq
+        }));
+
+        return {
+          cityCode: cityCode,
+          cityName: "公路客運 (GAS 雲端同步)",
+          stopOfRoute: [
+            { RouteID: "9005", RouteName: { Zh_tw: "9005" }, Direction: 0, Stops: stopsArr }
+          ],
+          routeFare: rawData
+        };
       }
     }
 
