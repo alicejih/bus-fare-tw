@@ -1,0 +1,10 @@
+# 系統與應用程式檔案
+.DS_Store
+Antigravity.app/
+Applications
+*.log
+
+# 本機大型暫存資料 (透過 Google Apps Script 雲端獲取或本機爬蟲產出)
+data/*.json
+!data/manifest.json
+!data/THSR_data.json

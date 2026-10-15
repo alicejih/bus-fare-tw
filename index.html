@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台灣公車與客運 站點直達路線與票價查詢 (TDX 資料源)</title>
+  <!-- 載入 Tailwind CSS (CDN) 與 Font Awesome 圖示 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- 頂部導覽列 -->
+  <header class="bg-gradient-to-r from-blue-700 via-indigo-700 to-sky-700 text-white shadow-lg sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shadow-inner">
+          <i class="fa-solid fa-bus text-yellow-300"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
+            台灣客運與公車 站點直達路線＆票價查詢
+            <span class="text-[10px] bg-yellow-400 text-slate-900 font-bold px-1.5 py-0.5 rounded shadow-sm">站對站直達</span>
+          </h1>
+          <p class="text-xs text-blue-100 opacity-90">基於交通部 TDX 運輸資料流通平台 • 即時智慧匹配起訖站與計算票價</p>
+        </div>
+      </div>
+      <!-- 快速載入狀態與本機檔案匯入按鈕 -->
+      <div class="flex items-center space-x-2 text-sm">
+        <label for="localFileInput" class="cursor-pointer bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg border border-white/30 transition flex items-center space-x-1.5 shadow-sm text-xs font-medium">
+          <i class="fa-solid fa-folder-open text-amber-300"></i>
+          <span>本機載入 JSON</span>
+        </label>
+        <input type="file" id="localFileInput" accept=".json" class="hidden">
+      </div>
+    </div>
+  </header>
+
+  <!-- 全域站牌自動完成清單 (Datalist) -->
+  <datalist id="allStopsDatalist"></datalist>
+
+  <!-- 主內容區 -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+
+    <!-- 🌟 重點功能：輸入站名 A 與站名 B 直接找路線與金額 (Point-to-Point Search) -->
+    <div class="bg-gradient-to-br from-indigo-900 via-slate-900 to-blue-900 rounded-3xl shadow-xl p-6 text-white border border-indigo-500/20">
+      <div class="max-w-4xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-lg bg-indigo-500/30 flex items-center justify-center text-indigo-300">
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i>
+            </span>
+            <h2 class="text-lg font-bold">直覺搜尋：輸入站名 A 往 站名 B 立即查直達路線與金額</h2>
+          </div>
+          <div class="text-xs text-indigo-200">
+            目前資料庫：<span id="currentLoadedDatasetBadge" class="font-bold text-amber-300">公路客運 (國道/跨縣市 - 9005)</span>
+          </div>
+        </div>
+
+        <!-- 搜尋輸入框列 -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+          <!-- 站名 A (起點) -->
+          <div class="md:col-span-5 relative">
+            <label class="block text-xs font-medium text-indigo-200 mb-1">
+              <i class="fa-solid fa-location-dot text-emerald-400 mr-1"></i> 出發站牌 (站名 A)
+            </label>
+            <div class="relative">
+              <input type="text" id="inputStopA" list="allStopsDatalist" placeholder="輸入站名 (例: 桃客總站、中正藝文特區)..." 
+                class="w-full bg-slate-800/90 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-400 focus:outline-none text-sm font-medium">
+              <button id="clearStopABtn" class="absolute right-3 top-3.5 text-slate-400 hover:text-white text-xs hidden">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 交換按鈕 -->
+          <div class="md:col-span-1 flex justify-center pt-5">
+            <button id="swapStopABBtn" title="交換出發與抵達站" 
+              class="w-10 h-10 rounded-xl bg-indigo-600/60 hover:bg-indigo-500 text-white flex items-center justify-center text-sm transition shadow border border-indigo-400/30">
+              <i class="fa-solid fa-arrow-right-arrow-left"></i>
+            </button>
+          </div>
+
+          <!-- 站名 B (訖點) -->
+          <div class="md:col-span-4 relative">
+            <label class="block text-xs font-medium text-indigo-200 mb-1">
+              <i class="fa-solid fa-flag-checkered text-rose-400 mr-1"></i> 抵達站牌 (站名 B)
+            </label>
+            <div class="relative">
+              <input type="text" id="inputStopB" list="allStopsDatalist" placeholder="輸入站名 (例: 市府轉運站、高公局)..." 
+                class="w-full bg-slate-800/90 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-400 focus:outline-none text-sm font-medium">
+              <button id="clearStopBBtn" class="absolute right-3 top-3.5 text-slate-400 hover:text-white text-xs hidden">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 搜尋按鈕 -->
+          <div class="md:col-span-2 pt-5">
+            <button id="btnSearchAB" 
+              class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg text-sm">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <span>查路線與票價</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 快速範例標籤 (Quick Pills) -->
+        <div class="flex flex-wrap items-center gap-2 mt-4 text-xs">
+          <span class="text-indigo-300 font-medium">✨ 常用熱門路線：</span>
+          <button class="quick-pill bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded-lg border border-white/15 transition" 
+            data-target="InterCity" data-from="桃客總站" data-to="市府轉運站">
+            🚌 9005客運 (桃客總站 ➜ 市府轉運站)
+          </button>
+          <button class="quick-pill bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded-lg border border-white/15 transition" 
+            data-target="InterCity" data-from="中正藝文特區" data-to="市府轉運站">
+            🚌 9005客運 (藝文特區 ➜ 市府轉運站)
+          </button>
+          <button class="quick-pill bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded-lg border border-white/15 transition" 
+            data-target="THSR" data-from="台北" data-to="左營">
+            🚄 高鐵 (台北 ➜ 左營/高雄)
+          </button>
+          <button class="quick-pill bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded-lg border border-white/15 transition" 
+            data-target="THSR" data-from="南港" data-to="台中">
+            🚄 高鐵 (南港 ➜ 台中)
+          </button>
+          <button class="quick-pill bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded-lg border border-white/15 transition" 
+            data-target="TRA" data-from="台北" data-to="花蓮">
+            🚂 台鐵 (台北 ➜ 花蓮)
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 站對站直達搜尋結果展示卡片 (動態展開) -->
+    <div id="odSearchResultSection" class="bg-white rounded-3xl shadow-sm border border-slate-200/80 p-6 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-route text-indigo-600"></i>
+            <span>站點直達路線搜尋結果</span>
+            <span id="odResultCountBadge" class="bg-indigo-100 text-indigo-800 text-xs px-2.5 py-0.5 rounded-full font-bold">0 條路線</span>
+          </h3>
+          <p id="odResultSubDesc" class="text-xs text-slate-500 mt-0.5">從 出發站 往 抵達站</p>
+        </div>
+        <button id="closeOdResultsBtn" class="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+          <i class="fa-solid fa-eye-slash"></i> 收起結果
+        </button>
+      </div>
+
+      <!-- 路線結果卡片列表容器 -->
+      <div id="odResultList" class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- 動態注入結果卡片 -->
+      </div>
+    </div>
+
+    <!-- 下半部：傳統路線瀏覽與沿途站牌檢視面板 -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- 左側：資料集切換與路線篩選 -->
+      <aside class="lg:col-span-4 flex flex-col space-y-5">
+        
+        <!-- 縣市資料庫選擇 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5">
+          <h2 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-database text-indigo-600"></i>
+            切換縣市 / 客運資料庫
+          </h2>
+
+          <div class="space-y-3">
+            <div>
+              <select id="targetSelect" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                <optgroup label="🚄 鐵道與跨縣市運具">
+                  <option value="InterCity">🚌 公路客運 (國道/跨縣市 - 含9005)</option>
+                  <option value="THSR">🚄 台灣高鐵 (THSR - 南港至左營全線)</option>
+                  <option value="TRA">🚂 台灣鐵路 (TRA / 台鐵全線)</option>
+                </optgroup>
+                <optgroup label="🏙️ 全台各縣市市區公車">
+                  <option value="Taipei">臺北市 (Taipei)</option>
+                  <option value="NewTaipei">新北市 (NewTaipei)</option>
+                  <option value="Taoyuan">桃園市 (Taoyuan)</option>
+                  <option value="Taichung">臺中市 (Taichung)</option>
+                  <option value="Tainan">臺南市 (Tainan)</option>
+                  <option value="Kaohsiung">高雄市 (Kaohsiung)</option>
+                  <option value="Keelung">基隆市 (Keelung)</option>
+                  <option value="Hsinchu">新竹市 (Hsinchu)</option>
+                  <option value="HsinchuCounty">新竹縣 (HsinchuCounty)</option>
+                  <option value="MiaoliCounty">苗栗縣 (MiaoliCounty)</option>
+                  <option value="ChanghuaCounty">彰化縣 (ChanghuaCounty)</option>
+                  <option value="NantouCounty">南投縣 (NantouCounty)</option>
+                  <option value="YunlinCounty">雲林縣 (YunlinCounty)</option>
+                  <option value="ChiayiCounty">嘉義縣 (ChiayiCounty)</option>
+                  <option value="Chiayi">嘉義市 (Chiayi)</option>
+                  <option value="PingtungCounty">屏東縣 (PingtungCounty)</option>
+                  <option value="YilanCounty">宜蘭縣 (YilanCounty)</option>
+                  <option value="HualienCounty">花蓮縣 (HualienCounty)</option>
+                  <option value="TaitungCounty">臺東縣 (TaitungCounty)</option>
+                  <option value="KinmenCounty">金門縣 (KinmenCounty)</option>
+                  <option value="PenghuCounty">澎湖縣 (PenghuCounty)</option>
+                  <option value="LienchiangCounty">連江縣 (LienchiangCounty)</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <button id="loadTargetBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-sm text-sm">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+              <span>載入此縣市資料檔</span>
+            </button>
+          </div>
+
+          <!-- 檔案載入狀態資訊 -->
+          <div id="fileInfoBox" class="mt-3 text-xs bg-slate-50 rounded-lg p-2.5 border border-slate-200 text-slate-500">
+            正在連線載入 InterCity_data.json ...
+          </div>
+        </div>
+
+        <!-- 路線搜尋卡片 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5">
+          <h2 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-bus text-indigo-600"></i>
+            瀏覽全部路線清單
+          </h2>
+
+          <div class="space-y-3">
+            <div class="relative">
+              <input type="text" id="routeSearchInput" placeholder="輸入路線代碼 (例: 9005)..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+            </div>
+
+            <div>
+              <div class="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1">
+                <span>路線選單</span>
+                <span class="text-slate-400 font-normal">共 <strong id="routeCountLabel" class="text-indigo-600">0</strong> 條</span>
+              </div>
+              <select id="routeSelect" size="5" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none custom-scroll">
+                <option value="" disabled selected>載入資料中...</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">方向</label>
+                <select id="directionSelect" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500">
+                  <option value="0">去程 (Dir 0)</option>
+                  <option value="1">返程 (Dir 1)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">附屬路線</label>
+                <select id="subRouteSelect" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500">
+                  <option value="all">全部附屬路線</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- 右側：選定路線之票價表與站牌順序 (含乘車區間高亮) -->
+      <section class="lg:col-span-8 flex flex-col space-y-5">
+
+        <!-- 路線詳細標題橫幅 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span id="badgeTarget" class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">公路客運</span>
+              <span id="badgeRoute" class="text-2xl font-black text-slate-900">9005</span>
+            </div>
+            <p id="routeSubTitle" class="text-xs text-slate-500">桃客總站 往 市府轉運站 (共 21 站)</p>
+          </div>
+
+          <!-- 頁籤切換：票價表 / 站牌列表 -->
+          <div class="flex bg-slate-100 p-1 rounded-xl self-stretch sm:self-auto text-xs">
+            <button id="tabFareBtn" class="flex-1 sm:flex-none px-4 py-2 rounded-lg font-semibold bg-white shadow-sm text-indigo-700 transition flex items-center gap-2">
+              <i class="fa-solid fa-coins"></i>
+              <span>區間票價表 (ODFare)</span>
+            </button>
+            <button id="tabStopsBtn" class="flex-1 sm:flex-none px-4 py-2 rounded-lg font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-2">
+              <i class="fa-solid fa-timeline"></i>
+              <span>沿途站牌 (Stops)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 票價資料檢視區 (ODFare Table) -->
+        <div id="fareViewContainer" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 flex-1 flex flex-col">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+              <i class="fa-solid fa-table-list text-indigo-600"></i>
+              <span>區間計費與票價列表 (Stage Fares)</span>
+              <span id="fareCountBadge" class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-normal">0 筆</span>
+            </h3>
+            <div class="text-xs text-slate-400">來源：TDX RouteFare</div>
+          </div>
+
+          <div class="overflow-x-auto flex-1 custom-scroll max-h-[520px]">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs font-semibold">
+                  <th class="py-2.5 px-3">起點站 (Origin)</th>
+                  <th class="py-2.5 px-3">訖點站 (Destination)</th>
+                  <th class="py-2.5 px-3">票種與費率 (Fares)</th>
+                  <th class="py-2.5 px-2 text-center">方向</th>
+                </tr>
+              </thead>
+              <tbody id="fareTableBody" class="divide-y divide-slate-100 text-xs">
+                <!-- 動態注入票價列 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 站牌清單檢視區 (StopOfRoute Timeline) -->
+        <div id="stopsViewContainer" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 flex-1 flex flex-col hidden">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+              <i class="fa-solid fa-list-ol text-indigo-600"></i>
+              <span>路線沿途站牌 (StopOfRoute)</span>
+              <span id="stopsCountBadge" class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-normal">0 站</span>
+            </h3>
+            <div id="highlightStopsNote" class="text-xs text-indigo-600 hidden">
+              <i class="fa-solid fa-highlighter"></i> 已為您標記乘車區間
+            </div>
+          </div>
+
+          <div class="overflow-y-auto flex-1 custom-scroll max-h-[520px] pr-2">
+            <div id="stopsTimeline" class="space-y-1.5">
+              <!-- 動態注入站牌 Timeline -->
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- 底部版權宣告 -->
+  <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-center text-xs text-slate-500">
+    交通數據來源：交通部 TDX 運輸資料流通服務平臺 (Transport Data eXchange) • 支援靜態 JSON 本機離線檢視
+  </footer>
+
+  <!-- 前端核心 JavaScript 邏輯 -->
+  <script>
+    // 狀態變數
+    let currentData = null; // 當前載入的縣市/類別完整 JSON
+    let currentCityCode = "InterCity";
+    let selectedRouteID = "9005";
+    let selectedDirection = 0;
+    let selectedSubRoute = "all";
+
+    // 搜尋區間標記高亮狀態
+    let highlightOriginStopName = "";
+    let highlightDestStopName = "";
+
+    // DOM 元素快取
+    const inputStopA = document.getElementById("inputStopA");
+    const inputStopB = document.getElementById("inputStopB");
+    const btnSearchAB = document.getElementById("btnSearchAB");
+    const swapStopABBtn = document.getElementById("swapStopABBtn");
+    const clearStopABtn = document.getElementById("clearStopABtn");
+    const clearStopBBtn = document.getElementById("clearStopBBtn");
+    const allStopsDatalist = document.getElementById("allStopsDatalist");
+    const odSearchResultSection = document.getElementById("odSearchResultSection");
+    const odResultList = document.getElementById("odResultList");
+    const odResultCountBadge = document.getElementById("odResultCountBadge");
+    const odResultSubDesc = document.getElementById("odResultSubDesc");
+    const closeOdResultsBtn = document.getElementById("closeOdResultsBtn");
+    const currentLoadedDatasetBadge = document.getElementById("currentLoadedDatasetBadge");
+
+    const targetSelect = document.getElementById("targetSelect");
+    const loadTargetBtn = document.getElementById("loadTargetBtn");
+    const fileInfoBox = document.getElementById("fileInfoBox");
+    const localFileInput = document.getElementById("localFileInput");
+    const routeSearchInput = document.getElementById("routeSearchInput");
+    const routeSelect = document.getElementById("routeSelect");
+    const routeCountLabel = document.getElementById("routeCountLabel");
+    const directionSelect = document.getElementById("directionSelect");
+    const subRouteSelect = document.getElementById("subRouteSelect");
+    const badgeTarget = document.getElementById("badgeTarget");
+    const badgeRoute = document.getElementById("badgeRoute");
+    const routeSubTitle = document.getElementById("routeSubTitle");
+    const tabFareBtn = document.getElementById("tabFareBtn");
+    const tabStopsBtn = document.getElementById("tabStopsBtn");
+    const fareViewContainer = document.getElementById("fareViewContainer");
+    const stopsViewContainer = document.getElementById("stopsViewContainer");
+    const fareTableBody = document.getElementById("fareTableBody");
+    const fareCountBadge = document.getElementById("fareCountBadge");
+    const stopsTimeline = document.getElementById("stopsTimeline");
+    const stopsCountBadge = document.getElementById("stopsCountBadge");
+    const highlightStopsNote = document.getElementById("highlightStopsNote");
+
+    // 初始化事件監聽
+    function init() {
+      // 站對站查詢事件
+      btnSearchAB.addEventListener("click", searchPointToPoint);
+      inputStopA.addEventListener("keydown", (e) => { if (e.key === "Enter") searchPointToPoint(); });
+      inputStopB.addEventListener("keydown", (e) => { if (e.key === "Enter") searchPointToPoint(); });
+      swapStopABBtn.addEventListener("click", () => {
+        const tmp = inputStopA.value;
+        inputStopA.value = inputStopB.value;
+        inputStopB.value = tmp;
+        searchPointToPoint();
+      });
+
+      // 輸入框清除按鈕
+      inputStopA.addEventListener("input", () => clearStopABtn.classList.toggle("hidden", !inputStopA.value));
+      inputStopB.addEventListener("input", () => clearStopBBtn.classList.toggle("hidden", !inputStopB.value));
+      clearStopABtn.addEventListener("click", () => { inputStopA.value = ""; clearStopABtn.classList.add("hidden"); inputStopA.focus(); });
+      clearStopBBtn.addEventListener("click", () => { inputStopB.value = ""; clearStopBBtn.classList.add("hidden"); inputStopB.focus(); });
+
+      // 快速示範標籤 (Pills)
+      document.querySelectorAll(".quick-pill").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const reqTarget = btn.dataset.target;
+          if (reqTarget && reqTarget !== currentCityCode) {
+            targetSelect.value = reqTarget;
+            await loadCityData(reqTarget);
+          }
+          inputStopA.value = btn.dataset.from;
+          inputStopB.value = btn.dataset.to;
+          clearStopABtn.classList.remove("hidden");
+          clearStopBBtn.classList.remove("hidden");
+          searchPointToPoint();
+        });
+      });
+
+      closeOdResultsBtn.addEventListener("click", () => odSearchResultSection.classList.add("hidden"));
+
+      // 縣市與路線事件
+      loadTargetBtn.addEventListener("click", () => loadCityData(targetSelect.value));
+      localFileInput.addEventListener("change", handleLocalFileSelect);
+      routeSearchInput.addEventListener("input", filterRouteList);
+      routeSelect.addEventListener("change", onRouteSelected);
+      directionSelect.addEventListener("change", () => {
+        selectedDirection = parseInt(directionSelect.value, 10);
+        renderCurrentRouteViews();
+      });
+      subRouteSelect.addEventListener("change", () => {
+        selectedSubRoute = subRouteSelect.value;
+        renderCurrentRouteViews();
+      });
+
+      // 頁籤切換
+      tabFareBtn.addEventListener("click", () => switchTab("fare"));
+      tabStopsBtn.addEventListener("click", () => switchTab("stops"));
+
+      // 預設載入 InterCity_data.json
+      loadCityData("InterCity");
+    }
+
+    // 切換頁籤
+    function switchTab(tab) {
+      if (tab === "fare") {
+        tabFareBtn.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg font-semibold bg-white shadow-sm text-indigo-700 transition flex items-center gap-2";
+        tabStopsBtn.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-2";
+        fareViewContainer.classList.remove("hidden");
+        stopsViewContainer.classList.add("hidden");
+      } else {
+        tabStopsBtn.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg font-semibold bg-white shadow-sm text-indigo-700 transition flex items-center gap-2";
+        tabFareBtn.className = "flex-1 sm:flex-none px-4 py-2 rounded-lg font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-2";
+        stopsViewContainer.classList.remove("hidden");
+        fareViewContainer.classList.add("hidden");
+      }
+    }
+
+    // 載入指定縣市 JSON 檔案
+    async function loadCityData(cityCode) {
+      currentCityCode = cityCode;
+      fileInfoBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> 正在載入 data/${cityCode}_data.json ...`;
+      
+      try {
+        const response = await fetch(`data/${cityCode}_data.json`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: 尚未產生或找不到該檔案`);
+        }
+        const data = await response.json();
+        parseLoadedData(data, `data/${cityCode}_data.json`);
+      } catch (err) {
+        fileInfoBox.innerHTML = `
+          <div class="text-amber-700">
+            <i class="fa-solid fa-triangle-exclamation"></i> <strong>無法透過網路載入：</strong>${err.message}<br>
+            <span class="text-[11px] text-slate-500">提示：若直接以瀏覽器雙擊 HTML 開啟，因安全策略需點擊右上角「本機載入 JSON」手動選取檔案。</span>
+          </div>`;
+      }
+    }
+
+    // 本機檔案選取載入處理
+    function handleLocalFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileInfoBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> 正在解析檔案 ${file.name} ...`;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = JSON.parse(evt.target.result);
+          parseLoadedData(data, file.name);
+        } catch (err) {
+          fileInfoBox.innerHTML = `<span class="text-rose-600"><i class="fa-solid fa-circle-xmark"></i> JSON 解析錯誤: ${err.message}</span>`;
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 輔助函式：取得站名文字
+    function getStopName(stopObj) {
+      if (!stopObj) return "";
+      if (typeof stopObj.StopName === "object") return stopObj.StopName.Zh_tw || stopObj.StopName.En;
+      return stopObj.StopName || stopObj.Name || "";
+    }
+
+    // 解析資料集並建立自動完成清單與路線選單
+    function parseLoadedData(data, sourceName) {
+      currentData = data;
+      const cityName = data.cityName || data.cityCode || "未知地區";
+      const stopsTotal = data.stopOfRoute ? data.stopOfRoute.length : 0;
+      const fareTotal = data.routeFare ? data.routeFare.length : 0;
+
+      fileInfoBox.innerHTML = `
+        <span class="text-emerald-700 font-semibold"><i class="fa-solid fa-circle-check"></i> 已成功載入 [${cityName}]</span><br>
+        <span class="text-[11px] text-slate-500">站牌路線: ${stopsTotal} 條 | 票價路線: ${fareTotal} 條</span>
+      `;
+
+      targetSelect.value = data.cityCode || currentCityCode;
+      badgeTarget.innerText = cityName;
+      currentLoadedDatasetBadge.innerText = `${cityName} (${data.cityCode || currentCityCode})`;
+
+      // 建立全域站牌名稱 Datalist (供輸入框快速下拉提示)
+      buildAllStopsDatalist();
+
+      // 建立路線清單
+      populateRouteList();
+
+      // 若有 9005 路線，自動優先選取
+      let targetRouteFound = false;
+      for (let opt of routeSelect.options) {
+        if (opt.value === "9005" || opt.text.includes("9005")) {
+          routeSelect.value = opt.value;
+          onRouteSelected();
+          targetRouteFound = true;
+          break;
+        }
+      }
+      if (!targetRouteFound && routeSelect.options.length > 0) {
+        routeSelect.selectedIndex = 0;
+        onRouteSelected();
+      }
+    }
+
+    // 建立所有站名清單以供自動完成
+    function buildAllStopsDatalist() {
+      if (!currentData || !currentData.stopOfRoute) return;
+      const uniqueStops = new Set();
+      currentData.stopOfRoute.forEach(route => {
+        if (route.Stops) {
+          route.Stops.forEach(s => {
+            const name = getStopName(s);
+            if (name) uniqueStops.add(name);
+          });
+        }
+      });
+
+      let html = "";
+      // 限制前 1500 個站名以保持流暢
+      Array.from(uniqueStops).sort().slice(0, 1500).forEach(name => {
+        html += `<option value="${name}"></option>`;
+      });
+      allStopsDatalist.innerHTML = html;
+    }
+
+    // 🌟 核心：站點對站點直達路線與金額搜尋演算法
+    function searchPointToPoint() {
+      const queryA = inputStopA.value.trim();
+      const queryB = inputStopB.value.trim();
+
+      if (!queryA || !queryB) {
+        alert("請同時輸入出發站牌 (站名 A) 與抵達站牌 (站名 B)");
+        return;
+      }
+      if (queryA === queryB) {
+        alert("出發站與抵達站不能相同");
+        return;
+      }
+
+      if (!currentData) {
+        alert("尚未載入資料檔，請稍候再試");
+        return;
+      }
+
+      highlightOriginStopName = queryA;
+      highlightDestStopName = queryB;
+
+      // 1. 建立 RouteID + Direction 對應 StageFares 的快速查詢表
+      const fareStagesMap = new Map();
+      if (currentData.routeFare) {
+        currentData.routeFare.forEach(rf => {
+          const rId = rf.RouteID || rf.RouteUID;
+          const sub = rf.SubRouteName ? (typeof rf.SubRouteName === "object" ? rf.SubRouteName.Zh_tw : rf.SubRouteName) : "";
+          if (rf.StageFares && Array.isArray(rf.StageFares)) {
+            rf.StageFares.forEach(st => {
+              const dir = st.Direction !== undefined ? st.Direction : 0;
+              const key = `${rId}_${dir}`;
+              if (!fareStagesMap.has(key)) fareStagesMap.set(key, []);
+              fareStagesMap.get(key).push({
+                subRoute: sub,
+                originStage: st.OriginStage ? (st.OriginStage.StopName || st.OriginStage.StageName || "") : "",
+                destStage: st.DestinationStage ? (st.DestinationStage.StopName || st.DestinationStage.StageName || "") : "",
+                fares: st.Fares || []
+              });
+            });
+          }
+        });
+      }
+
+      // 2. 遍歷所有路線之站牌序列 (StopOfRoute)，尋找包含站名 A 且站名 A 位於站名 B 之前的直達路線
+      const matchedRoutes = [];
+      const seenRouteDirKeys = new Set();
+
+      if (currentData.stopOfRoute) {
+        currentData.stopOfRoute.forEach(route => {
+          const rId = route.RouteID || route.RouteUID;
+          const rName = typeof route.RouteName === "object" ? (route.RouteName.Zh_tw || route.RouteName.En) : route.RouteName;
+          const dir = route.Direction !== undefined ? route.Direction : 0;
+          const subName = typeof route.SubRouteName === "object" ? (route.SubRouteName.Zh_tw || route.SubRouteName.En) : (route.SubRouteName || rName);
+          const stops = route.Stops || [];
+
+          // 尋找符合 queryA 與 queryB 的站點
+          const stopsA = stops.filter(s => getStopName(s).includes(queryA));
+          const stopsB = stops.filter(s => getStopName(s).includes(queryB));
+
+          if (stopsA.length > 0 && stopsB.length > 0) {
+            for (let sa of stopsA) {
+              for (let sb of stopsB) {
+                const seqA = sa.StopSequence !== undefined ? sa.StopSequence : stops.indexOf(sa);
+                const seqB = sb.StopSequence !== undefined ? sb.StopSequence : stops.indexOf(sb);
+
+                // 必須是順向行駛 (A 在 B 之前)
+                if (seqA < seqB) {
+                  const dedupeKey = `${rId}_${dir}_${getStopName(sa)}_${getStopName(sb)}`;
+                  if (!seenRouteDirKeys.has(dedupeKey)) {
+                    seenRouteDirKeys.add(dedupeKey);
+
+                    // 尋找適用之票價
+                    const key = `${rId}_${dir}`;
+                    const stageList = fareStagesMap.get(key) || [];
+                    let matchedFares = [];
+
+                    const saName = getStopName(sa);
+                    const sbName = getStopName(sb);
+
+                    // 第一優先：精準或包含匹配計費區間
+                    for (let st of stageList) {
+                      if ((st.originStage.includes(saName) || saName.includes(st.originStage)) &&
+                          (st.destStage.includes(sbName) || sbName.includes(st.destStage))) {
+                        matchedFares = st.fares;
+                        break;
+                      }
+                    }
+
+                    // 第二優先：模糊比對任何含 queryA 與 queryB 的區間
+                    if (matchedFares.length === 0) {
+                      for (let st of stageList) {
+                        if ((st.originStage.includes(queryA) || queryA.includes(st.originStage)) &&
+                            (st.destStage.includes(queryB) || queryB.includes(st.destStage))) {
+                          matchedFares = st.fares;
+                          break;
+                        }
+                      }
+                    }
+
+                    // 第三優先：若該路線有計費區間但為站外換算，抓取該路線一般票價示範
+                    if (matchedFares.length === 0 && stageList.length > 0 && stageList[0].fares) {
+                      matchedFares = stageList[0].fares;
+                    }
+
+                    matchedRoutes.push({
+                      routeID: rId,
+                      routeName: rName,
+                      subRouteName: subName,
+                      direction: dir,
+                      stopA: saName,
+                      stopB: sbName,
+                      seqA: seqA,
+                      seqB: sbBSeq = seqB,
+                      stopCount: seqB - seqA,
+                      fares: matchedFares,
+                      firstStop: getStopName(stops[0]),
+                      lastStop: getStopName(stops[stops.length - 1]),
+                      stopsList: stops
+                    });
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // 3. 渲染結果
+      renderPointToPointResults(queryA, queryB, matchedRoutes);
+    }
+
+    // 渲染站點對站點查詢結果卡片
+    function renderPointToPointResults(stopA, stopB, results) {
+      odSearchResultSection.classList.remove("hidden");
+      odResultCountBadge.innerText = `找到 ${results.length} 條直達客運/公車`;
+      odResultSubDesc.innerHTML = `出發站：<strong class="text-emerald-600">${stopA}</strong> ➜ 抵達站：<strong class="text-rose-600">${stopB}</strong>`;
+
+      if (results.length === 0) {
+        odResultList.innerHTML = `
+          <div class="col-span-full py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <i class="fa-solid fa-triangle-exclamation text-3xl mb-2 block text-amber-500"></i>
+            在目前載入的資料庫中，未找到從 <strong>「${stopA}」</strong> 直達 <strong>「${stopB}」</strong> 的路線。<br>
+            <span class="text-xs text-slate-400 mt-1 block">提示：可嘗試縮短關鍵字 (例如輸入「桃園」與「市府」) 或切換左側之縣市資料庫。</span>
+          </div>`;
+        odSearchResultSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      let html = "";
+      results.forEach((r, idx) => {
+        // 票價徽章標籤
+        let faresHtml = "";
+        if (r.fares && r.fares.length > 0) {
+          faresHtml = '<div class="grid grid-cols-2 gap-1.5 mt-3">';
+          r.fares.forEach(f => {
+            faresHtml += `
+              <div class="bg-indigo-50/80 border border-indigo-100 rounded-lg p-2 text-left">
+                <div class="text-[11px] text-slate-500 truncate">${f.FareName || '票種'}</div>
+                <div class="text-base font-black text-indigo-700">$${f.Price} <span class="text-[10px] text-slate-400 font-normal">NTD</span></div>
+              </div>
+            `;
+          });
+          faresHtml += '</div>';
+        } else {
+          faresHtml = `
+            <div class="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+              <i class="fa-solid fa-circle-info mr-1"></i>採基本市區段次收費 (全票 15元/段) 或查無固定區間價
+            </div>`;
+        }
+
+        html += `
+          <div class="bg-slate-50 hover:bg-white rounded-2xl p-5 border border-slate-200 hover:border-indigo-300 transition hover:shadow-md flex flex-col justify-between group">
+            <div>
+              <!-- 頂部路線徽章與方向 -->
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition">
+                    ${r.routeName}
+                  </span>
+                  <span class="text-[11px] px-2 py-0.5 rounded-full ${r.direction === 0 ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'} font-medium">
+                    ${r.direction === 0 ? '去程 (Dir 0)' : '返程 (Dir 1)'}
+                  </span>
+                </div>
+                <span class="text-xs text-slate-400 font-medium">途經 ${r.stopCount} 站</span>
+              </div>
+
+              <!-- 起訖點描述 -->
+              <div class="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
+                <i class="fa-solid fa-arrows-split-up-and-left text-[11px] text-indigo-500"></i>
+                <span class="truncate">${r.subRouteName || r.routeName} (${r.firstStop} 往 ${r.lastStop})</span>
+              </div>
+
+              <!-- 實際搭乘起訖區間 -->
+              <div class="bg-white group-hover:bg-indigo-50/40 p-3 rounded-xl border border-slate-200 group-hover:border-indigo-200 transition space-y-2">
+                <div class="flex items-center text-xs font-semibold text-slate-800">
+                  <span class="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] mr-2">A</span>
+                  <span class="text-emerald-700">${r.stopA}</span>
+                  <span class="text-[10px] text-slate-400 ml-auto">第 ${r.seqA} 站</span>
+                </div>
+                <div class="border-l-2 border-dashed border-indigo-200 ml-2 pl-4 py-0.5 text-[11px] text-indigo-500">
+                  乘坐 ${r.stopCount} 站區間
+                </div>
+                <div class="flex items-center text-xs font-semibold text-slate-800">
+                  <span class="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] mr-2">B</span>
+                  <span class="text-rose-700">${r.stopB}</span>
+                  <span class="text-[10px] text-slate-400 ml-auto">第 ${r.seqB} 站</span>
+                </div>
+              </div>
+
+              <!-- 票價金額區塊 -->
+              ${faresHtml}
+            </div>
+
+            <!-- 底部動作按鈕：一鍵跳轉沿途各站 -->
+            <button onclick="inspectRouteFromSearchResult('${r.routeID}', ${r.direction}, '${r.stopA}', '${r.stopB}')" 
+              class="w-full mt-4 bg-indigo-600 group-hover:bg-indigo-700 text-white py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-list-check"></i>
+              <span>查看路線站牌與區間高亮</span>
+            </button>
+          </div>
+        `;
+      });
+
+      odResultList.innerHTML = html;
+      odSearchResultSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // 點擊搜尋結果中的「查看路線站牌」：自動同步左側選單、切換路線並高亮標記乘車區間
+    window.inspectRouteFromSearchResult = function(routeID, direction, stopA, stopB) {
+      highlightOriginStopName = stopA;
+      highlightDestStopName = stopB;
+
+      // 選取路線
+      routeSelect.value = routeID;
+      selectedRouteID = routeID;
+      selectedDirection = direction;
+      directionSelect.value = direction;
+
+      const selectedOpt = routeSelect.options[routeSelect.selectedIndex];
+      badgeRoute.innerText = selectedOpt ? selectedOpt.textContent.replace(/^[🎫📍]\s*/, "") : selectedRouteID;
+
+      populateSubRouteOptions();
+      renderCurrentRouteViews();
+
+      // 切換至站牌頁籤
+      switchTab("stops");
+
+      // 平滑滾動到右側展示區
+      document.getElementById("stopsViewContainer").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+
+    // 建立路線清單下拉選單
+    function populateRouteList() {
+      if (!currentData) return;
+      const routesMap = new Map();
+
+      if (currentData.stopOfRoute) {
+        currentData.stopOfRoute.forEach(item => {
+          const id = item.RouteID || item.RouteUID;
+          const name = typeof item.RouteName === "object" ? (item.RouteName.Zh_tw || item.RouteName.En) : item.RouteName;
+          if (id && !routesMap.has(id)) routesMap.set(id, { id, name: name || id, hasStops: true, hasFare: false });
+        });
+      }
+      if (currentData.routeFare) {
+        currentData.routeFare.forEach(item => {
+          const id = item.RouteID || item.RouteUID;
+          const name = typeof item.RouteName === "object" ? (item.RouteName.Zh_tw || item.RouteName.En) : item.RouteName;
+          if (id && !routesMap.has(id)) {
+            routesMap.set(id, { id, name: name || id, hasStops: false, hasFare: true });
+          } else if (id) {
+            routesMap.get(id).hasFare = true;
+          }
+        });
+      }
+
+      const sortedRoutes = Array.from(routesMap.values()).sort((a, b) => a.name.localeCompare(b.name, "zh-Hant-TW", { numeric: true }));
+
+      routeSelect.innerHTML = "";
+      sortedRoutes.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r.id;
+        const tag = r.hasFare ? "🎫" : "📍";
+        opt.textContent = `${tag} ${r.name} (${r.id})`;
+        routeSelect.appendChild(opt);
+      });
+
+      routeCountLabel.innerText = sortedRoutes.length;
+      routeSearchInput.value = "";
+    }
+
+    // 關鍵字搜尋過濾路線
+    function filterRouteList() {
+      const keyword = routeSearchInput.value.trim().toLowerCase();
+      let matchCount = 0;
+      Array.from(routeSelect.options).forEach(opt => {
+        const text = opt.textContent.toLowerCase();
+        const val = opt.value.toLowerCase();
+        const isMatch = text.includes(keyword) || val.includes(keyword);
+        opt.style.display = isMatch ? "" : "none";
+        if (isMatch) matchCount++;
+      });
+      routeCountLabel.innerText = matchCount;
+    }
+
+    // 當選定某一條路線時
+    function onRouteSelected() {
+      selectedRouteID = routeSelect.value;
+      if (!selectedRouteID) return;
+
+      const selectedOpt = routeSelect.options[routeSelect.selectedIndex];
+      const routeText = selectedOpt ? selectedOpt.textContent.replace(/^[🎫📍]\s*/, "") : selectedRouteID;
+      badgeRoute.innerText = routeText;
+
+      populateSubRouteOptions();
+      renderCurrentRouteViews();
+    }
+
+    // 填充附屬路線 (SubRoute) 下拉選單
+    function populateSubRouteOptions() {
+      subRouteSelect.innerHTML = '<option value="all">全部附屬路線</option>';
+      const subRoutes = new Set();
+
+      if (currentData.routeFare) {
+        currentData.routeFare.filter(f => f.RouteID === selectedRouteID).forEach(f => {
+          const sName = typeof f.SubRouteName === "object" ? (f.SubRouteName.Zh_tw || f.SubRouteName.En) : f.SubRouteName;
+          if (sName) subRoutes.add(sName);
+        });
+      }
+      if (currentData.stopOfRoute) {
+        currentData.stopOfRoute.filter(s => s.RouteID === selectedRouteID).forEach(s => {
+          const sName = typeof s.SubRouteName === "object" ? (s.SubRouteName.Zh_tw || s.SubRouteName.En) : s.SubRouteName;
+          if (sName) subRoutes.add(sName);
+        });
+      }
+
+      subRoutes.forEach(sub => {
+        const opt = document.createElement("option");
+        opt.value = sub;
+        opt.textContent = sub;
+        subRouteSelect.appendChild(opt);
+      });
+      selectedSubRoute = "all";
+    }
+
+    // 渲染當前路線的視圖
+    function renderCurrentRouteViews() {
+      if (!currentData || !selectedRouteID) return;
+
+      const matchingStopsLists = (currentData.stopOfRoute || []).filter(item => {
+        const isRoute = (item.RouteID === selectedRouteID || item.RouteUID === selectedRouteID);
+        const isDir = (item.Direction === selectedDirection);
+        const subName = typeof item.SubRouteName === "object" ? (item.SubRouteName.Zh_tw || item.SubRouteName.En) : item.SubRouteName;
+        const isSub = (selectedSubRoute === "all" || subName === selectedSubRoute);
+        return isRoute && isDir && isSub;
+      });
+
+      let activeStopList = [];
+      if (matchingStopsLists.length > 0 && matchingStopsLists[0].Stops) {
+        activeStopList = matchingStopsLists[0].Stops;
+      } else {
+        const fallback = (currentData.stopOfRoute || []).find(item => 
+          (item.RouteID === selectedRouteID || item.RouteUID === selectedRouteID) && item.Direction === selectedDirection
+        );
+        if (fallback && fallback.Stops) activeStopList = fallback.Stops;
+      }
+
+      if (activeStopList.length > 0) {
+        const startStop = getStopName(activeStopList[0]);
+        const endStop = getStopName(activeStopList[activeStopList.length - 1]);
+        routeSubTitle.innerText = `${startStop} 往 ${endStop} (共 ${activeStopList.length} 站)`;
+      } else {
+        routeSubTitle.innerText = `行駛方向: ${selectedDirection === 0 ? "去程" : "返程"}`;
+      }
+
+      renderStopsTimeline(activeStopList);
+      renderFareTable(activeStopList);
+    }
+
+    // 渲染站牌列表 (Timeline)，並支援乘車區間高亮！
+    function renderStopsTimeline(stopsList) {
+      stopsCountBadge.innerText = `${stopsList.length} 站`;
+
+      if (stopsList.length === 0) {
+        stopsTimeline.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <i class="fa-solid fa-circle-exclamation text-3xl mb-2 block text-amber-500"></i>
+            查無此方向/支線的站牌順序資料 (StopOfRoute)
+          </div>`;
+        highlightStopsNote.classList.add("hidden");
+        return;
+      }
+
+      // 檢查是否需高亮特定乘車區間
+      let startIndex = -1;
+      let endIndex = -1;
+      if (highlightOriginStopName && highlightDestStopName) {
+        stopsList.forEach((s, idx) => {
+          const name = getStopName(s);
+          if (startIndex === -1 && name.includes(highlightOriginStopName)) startIndex = idx;
+          if (endIndex === -1 && name.includes(highlightDestStopName)) endIndex = idx;
+        });
+      }
+
+      const hasHighlight = (startIndex !== -1 && endIndex !== -1 && startIndex <= endIndex);
+      highlightStopsNote.classList.toggle("hidden", !hasHighlight);
+
+      let html = "";
+      stopsList.forEach((stop, index) => {
+        const name = getStopName(stop);
+        const isStart = hasHighlight && index === startIndex;
+        const isEnd = hasHighlight && index === endIndex;
+        const isInRange = hasHighlight && index > startIndex && index < endIndex;
+
+        let rowBgClass = "hover:bg-indigo-50/60";
+        let badgeBgClass = "bg-slate-200 text-slate-700";
+
+        if (isStart) {
+          rowBgClass = "bg-emerald-50 border-emerald-300 ring-2 ring-emerald-400/30";
+          badgeBgClass = "bg-emerald-600 text-white";
+        } else if (isEnd) {
+          rowBgClass = "bg-rose-50 border-rose-300 ring-2 ring-rose-400/30";
+          badgeBgClass = "bg-rose-600 text-white";
+        } else if (isInRange) {
+          rowBgClass = "bg-indigo-50/50 border-indigo-200";
+          badgeBgClass = "bg-indigo-500 text-white";
+        }
+
+        html += `
+          <div class="flex items-center space-x-3 p-2.5 rounded-xl border border-transparent transition ${rowBgClass}">
+            <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${badgeBgClass}">
+              ${index + 1}
+            </div>
+            <div class="flex-1">
+              <div class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span>${name}</span>
+                ${isStart ? '<span class="text-[10px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-semibold">搭乘起點 A</span>' : ''}
+                ${isEnd ? '<span class="text-[10px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-semibold">抵達訖點 B</span>' : ''}
+                ${isInRange ? '<span class="text-[10px] text-indigo-500 font-normal">● 途中行經</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400">站點 ID: ${stop.StopID || stop.StopUID || 'N/A'}</div>
+            </div>
+            <button onclick="setStopFromTimeline('${name}')" class="text-[11px] text-indigo-600 hover:text-indigo-800">
+              帶入搜尋
+            </button>
+          </div>
+        `;
+      });
+
+      stopsTimeline.innerHTML = html;
+    }
+
+    // 點擊站牌直接帶入搜尋列
+    window.setStopFromTimeline = function(name) {
+      if (!inputStopA.value) {
+        inputStopA.value = name;
+        clearStopABtn.classList.remove("hidden");
+      } else {
+        inputStopB.value = name;
+        clearStopBBtn.classList.remove("hidden");
+      }
+    };
+
+    // 渲染票價資料表格
+    function renderFareTable(stopsList) {
+      const fares = (currentData.routeFare || []).filter(item => item.RouteID === selectedRouteID || item.RouteUID === selectedRouteID);
+
+      let allStages = [];
+      fares.forEach(fareItem => {
+        const subName = typeof fareItem.SubRouteName === "object" ? (fareItem.SubRouteName.Zh_tw || fareItem.SubRouteName.En) : fareItem.SubRouteName;
+        if (selectedSubRoute !== "all" && subName && subName !== selectedSubRoute) return;
+
+        if (fareItem.StageFares && Array.isArray(fareItem.StageFares)) {
+          fareItem.StageFares.forEach(stage => {
+            if (stage.Direction === undefined || stage.Direction === selectedDirection) {
+              allStages.push(stage);
+            }
+          });
+        }
+      });
+
+      fareCountBadge.innerText = `${allStages.length} 筆`;
+
+      if (allStages.length === 0) {
+        fareTableBody.innerHTML = `
+          <tr>
+            <td colspan="4" class="text-center py-12 text-slate-400">
+              <i class="fa-solid fa-receipt text-3xl mb-2 block text-slate-300"></i>
+              本路線無起訖站區間票價資料 (部分市區公車採固定一段票計費)
+            </td>
+          </tr>`;
+        return;
+      }
+
+      let html = "";
+      allStages.forEach(stage => {
+        const originName = stage.OriginStage ? (stage.OriginStage.StopName || stage.OriginStage.StageName || stage.OriginStage.StopID) : "N/A";
+        const destName = stage.DestinationStage ? (stage.DestinationStage.StopName || stage.DestinationStage.StageName || stage.DestinationStage.StopID) : "N/A";
+
+        let faresHtml = '<div class="flex flex-wrap gap-1">';
+        if (stage.Fares && Array.isArray(stage.Fares)) {
+          stage.Fares.forEach(f => {
+            faresHtml += `
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-800 border border-slate-200">
+                <span class="text-slate-500 mr-1">${f.FareName || '票價'}:</span>
+                <strong class="text-indigo-600 font-bold">$${f.Price}</strong>
+              </span>
+            `;
+          });
+        }
+        faresHtml += '</div>';
+
+        html += `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="py-2.5 px-3 font-medium text-slate-800">
+              <i class="fa-solid fa-circle-dot text-[10px] text-emerald-500 mr-1"></i>
+              ${originName}
+            </td>
+            <td class="py-2.5 px-3 font-medium text-slate-800">
+              <i class="fa-solid fa-location-dot text-[10px] text-rose-500 mr-1"></i>
+              ${destName}
+            </td>
+            <td class="py-2.5 px-3">${faresHtml}</td>
+            <td class="py-2.5 px-2 text-center text-[11px] text-slate-400">${stage.Direction === 1 ? "返程" : "去程"}</td>
+          </tr>
+        `;
+      });
+
+      fareTableBody.innerHTML = html;
+    }
+
+    // 啟動程式
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

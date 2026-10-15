@@ -1,0 +1,209 @@
+[
+  {
+    "code": "InterCity",
+    "name": "公路客運 (國道/跨縣市)",
+    "file": "InterCity_data.json",
+    "sizeMB": 210.26,
+    "stopsCount": 1859,
+    "faresCount": 1779,
+    "updatedAt": "2026-10-15T02:09:13.319255"
+  },
+  {
+    "code": "Taipei",
+    "name": "臺北市",
+    "file": "Taipei_data.json",
+    "sizeMB": 22.45,
+    "stopsCount": 1223,
+    "faresCount": 722,
+    "updatedAt": "2026-10-15T02:10:02.192726"
+  },
+  {
+    "code": "NewTaipei",
+    "name": "新北市",
+    "file": "NewTaipei_data.json",
+    "sizeMB": 23.01,
+    "stopsCount": 1379,
+    "faresCount": 1007,
+    "updatedAt": "2026-10-15T02:11:02.140856"
+  },
+  {
+    "code": "Taoyuan",
+    "name": "桃園市",
+    "file": "Taoyuan_data.json",
+    "sizeMB": 372.07,
+    "stopsCount": 666,
+    "faresCount": 681,
+    "updatedAt": "2026-10-15T02:11:08.891873"
+  },
+  {
+    "code": "Taichung",
+    "name": "臺中市",
+    "file": "Taichung_data.json",
+    "sizeMB": 346.67,
+    "stopsCount": 761,
+    "faresCount": 359,
+    "updatedAt": "2026-10-15T02:12:08.240754"
+  },
+  {
+    "code": "Tainan",
+    "name": "臺南市",
+    "file": "Tainan_data.json",
+    "sizeMB": 11.15,
+    "stopsCount": 694,
+    "faresCount": 0,
+    "updatedAt": "2026-10-15T02:12:19.711724"
+  },
+  {
+    "code": "Kaohsiung",
+    "name": "高雄市",
+    "file": "Kaohsiung_data.json",
+    "sizeMB": 82.61,
+    "stopsCount": 618,
+    "faresCount": 303,
+    "updatedAt": "2026-10-15T02:12:21.967882"
+  },
+  {
+    "code": "Keelung",
+    "name": "基隆市",
+    "file": "Keelung_data.json",
+    "sizeMB": 3.61,
+    "stopsCount": 168,
+    "faresCount": 0,
+    "updatedAt": "2026-10-15T02:13:01.587361"
+  },
+  {
+    "code": "Hsinchu",
+    "name": "新竹市",
+    "file": "Hsinchu_data.json",
+    "sizeMB": 0.94,
+    "stopsCount": 64,
+    "faresCount": 13,
+    "updatedAt": "2026-10-15T02:13:02.091050"
+  },
+  {
+    "code": "HsinchuCounty",
+    "name": "新竹縣",
+    "file": "HsinchuCounty_data.json",
+    "sizeMB": 6.36,
+    "stopsCount": 126,
+    "faresCount": 42,
+    "updatedAt": "2026-10-15T02:14:01.774792"
+  },
+  {
+    "code": "MiaoliCounty",
+    "name": "苗栗縣",
+    "file": "MiaoliCounty_data.json",
+    "sizeMB": 0.16,
+    "stopsCount": 8,
+    "faresCount": 2,
+    "updatedAt": "2026-10-15T02:14:02.246084"
+  },
+  {
+    "code": "ChanghuaCounty",
+    "name": "彰化縣",
+    "file": "ChanghuaCounty_data.json",
+    "sizeMB": 2.03,
+    "stopsCount": 54,
+    "faresCount": 38,
+    "updatedAt": "2026-10-15T02:14:02.908161"
+  },
+  {
+    "code": "NantouCounty",
+    "name": "南投縣",
+    "file": "NantouCounty_data.json",
+    "sizeMB": 1.44,
+    "stopsCount": 44,
+    "faresCount": 14,
+    "updatedAt": "2026-10-15T02:15:01.135285"
+  },
+  {
+    "code": "YunlinCounty",
+    "name": "雲林縣",
+    "file": "YunlinCounty_data.json",
+    "sizeMB": 1.09,
+    "stopsCount": 32,
+    "faresCount": 16,
+    "updatedAt": "2026-10-15T02:15:01.678705"
+  },
+  {
+    "code": "ChiayiCounty",
+    "name": "嘉義縣",
+    "file": "ChiayiCounty_data.json",
+    "sizeMB": 6.5,
+    "stopsCount": 104,
+    "faresCount": 81,
+    "updatedAt": "2026-10-15T02:16:01.405598"
+  },
+  {
+    "code": "Chiayi",
+    "name": "嘉義市",
+    "file": "Chiayi_data.json",
+    "sizeMB": 1.54,
+    "stopsCount": 29,
+    "faresCount": 14,
+    "updatedAt": "2026-10-15T02:16:02.118830"
+  },
+  {
+    "code": "PingtungCounty",
+    "name": "屏東縣",
+    "file": "PingtungCounty_data.json",
+    "sizeMB": 25.55,
+    "stopsCount": 335,
+    "faresCount": 271,
+    "updatedAt": "2026-10-15T02:16:03.008827"
+  },
+  {
+    "code": "YilanCounty",
+    "name": "宜蘭縣",
+    "file": "YilanCounty_data.json",
+    "sizeMB": 8.14,
+    "stopsCount": 198,
+    "faresCount": 43,
+    "updatedAt": "2026-10-15T02:17:02.097484"
+  },
+  {
+    "code": "HualienCounty",
+    "name": "花蓮縣",
+    "file": "HualienCounty_data.json",
+    "sizeMB": 3.4,
+    "stopsCount": 31,
+    "faresCount": 20,
+    "updatedAt": "2026-10-15T02:17:02.871896"
+  },
+  {
+    "code": "TaitungCounty",
+    "name": "臺東縣",
+    "file": "TaitungCounty_data.json",
+    "sizeMB": 0.07,
+    "stopsCount": 8,
+    "faresCount": 4,
+    "updatedAt": "2026-10-15T02:18:01.455548"
+  },
+  {
+    "code": "KinmenCounty",
+    "name": "金門縣",
+    "file": "KinmenCounty_data.json",
+    "sizeMB": 2.48,
+    "stopsCount": 126,
+    "faresCount": 126,
+    "updatedAt": "2026-10-15T02:18:01.859147"
+  },
+  {
+    "code": "PenghuCounty",
+    "name": "澎湖縣",
+    "file": "PenghuCounty_data.json",
+    "sizeMB": 20.11,
+    "stopsCount": 158,
+    "faresCount": 120,
+    "updatedAt": "2026-10-15T02:18:02.516123"
+  },
+  {
+    "code": "LienchiangCounty",
+    "name": "連江縣",
+    "file": "LienchiangCounty_data.json",
+    "sizeMB": 0.52,
+    "stopsCount": 68,
+    "faresCount": 0,
+    "updatedAt": "2026-10-15T02:19:01.247773"
+  }
+]
